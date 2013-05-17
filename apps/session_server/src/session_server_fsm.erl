@@ -10,21 +10,20 @@
 %% MACROS
 %% ###############################################################
 
--include("logger.hrl").
--include("session_server.hrl").
+-include_lib("utils/include/logger.hrl").
 
 %% ###############################################################
 %% STATE
 %% ###############################################################
 
--record(state, {id, key, timeout, start_time}).
+-record(state, {id, key, timeout, start_time, reason}).
 
 %% ###############################################################
 %% API
 %% ###############################################################
 
 start_link(ApplicationKey, DeviceId) ->
-    gen_fsm:start_link({local, ?L2A(DeviceId)}, ?MODULE, [ApplicationKey, DeviceId], []).
+    gen_fsm:start_link({local, DeviceId}, ?MODULE, [ApplicationKey, DeviceId], []).
 
 %% ###############################################################
 %% GEN_FSM CALLBACKS
@@ -40,16 +39,16 @@ init([ApplicationKey, DeviceId]) ->
 'STARTED'(ping, #state{timeout=Timeout} = State) ->
     {next_state, 'ACTIVE', State, Timeout};
 'STARTED'(timeout, State) ->
-    {stop, normal, State};
+    {stop, normal, State#state{reason = timeout}};
 'STARTED'(stop, State) ->
-    {stop, normal, State}.
+    {stop, normal, State#state{reason = normal}}.
 
 'ACTIVE'(ping, #state{timeout=Timeout} = State) ->
     {next_state, 'ACTIVE', State, Timeout};
 'ACTIVE'(timeout, State) ->
-    {stop, normal, State};
+    {stop, normal, State#state{reason = timeout}};
 'ACTIVE'(stop, State) ->
-    {stop, normal, State}.
+    {stop, normal, State#state{reason = normal}}.
 
 handle_event(_Event, StateName, StateData) ->
     {next_state, StateName, StateData}.
@@ -60,40 +59,13 @@ handle_info(_Info, StateName, StateData) ->
 handle_sync_event(_Event, _From, StateName, StateData) ->
     {next_state, StateName, StateData}.
 
-terminate(Reason, StateName, #state{id = Id, key = ApplicationKey, start_time = Start}) ->
-    update_stats(ApplicationKey, Id, Start, Reason, StateName).
+terminate(_, StateName, #state{id = Id, key = Key, start_time = Start, reason = Reason}) ->
+    SessionTime = timer:now_diff(erlang:now(), Start) div 1000000,
+    ?INF("Session ~s/~s terminated. Duration: ~p State: ~p Reason: ~p",
+        [Key, Id, SessionTime, StateName, Reason]).
 
 code_change(_OldVsn, _StateName, State, _Extra) ->
     {ok, State}.
-
-%% ###############################################################
-%% INTERNAL FUNCTIONS
-%% ###############################################################
-
-update_stats(ApplicationKey, Id, Start, Reason, StateName) ->
-    SessionTime = timer:now_diff(erlang:now(), Start) div 1000000,
-    Stats = stats(SessionTime, Reason, StateName),
-    try session_server_stats:save(?L2B(ApplicationKey), ?L2B(Id), timestamp(Start), Stats) of
-        ok ->
-            ?INF("Session terminated. Stats saved - ~s ~s ~p: ~p",
-                [ApplicationKey, Id, SessionTime, Reason]),
-            ok;
-        {error, Reason} ->
-            ?ERR("Failed to save session time - ~s ~s ~p: ~p",
-                [ApplicationKey, Id, SessionTime, Reason]),
-            ok
-    catch
-        _:Reason ->
-            ?ERR("Failed to save session time - ~s ~s ~p: ~p",
-                [ApplicationKey, Id, SessionTime, Reason]),
-            ok
-    end.
-
-stats(SessionTime, Reason, StateName) ->
-    [{duration, SessionTime}, {reason, Reason}, {state, StateName}].
-
-timestamp({Mega, Sec, Micro}) ->
-    Mega * 1000000 * 1000000 + Sec * 1000000 + Micro.
 
 %% ###############################################################
 %% ###############################################################

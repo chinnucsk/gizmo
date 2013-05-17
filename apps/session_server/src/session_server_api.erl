@@ -7,19 +7,22 @@
 %% MACROS
 %% ###############################################################
 
--include("session_server.hrl").
+-include_lib("utils/include/types.hrl").
 
 %% ###############################################################
 %% API
 %% ###############################################################
 
+%% @doc Sends ping to given device process
 -spec ping(string(), string()) -> ok | {error, term()}.
 ping(ApplicationKey, DeviceId) ->
-    case application_key:exists(?L2B(ApplicationKey)) of
+    case application_obj:exists(?L2B(ApplicationKey)) of
         true ->
-            do_ping(ApplicationKey, DeviceId);
+            do_ping(ApplicationKey, ?L2A(DeviceId));
         false ->
-            {error, application_not_found}
+            {error, application_not_found};
+        {error, Error} ->
+            {error, Error}
     end.
 
 %% ###############################################################
@@ -29,7 +32,7 @@ ping(ApplicationKey, DeviceId) ->
 do_ping(ApplicationKey, DeviceId) ->
     case ensure_session_started(ApplicationKey, DeviceId) of
         {ok, running} ->
-            gen_fsm:send_event(?L2A(DeviceId), ping);
+            gen_fsm:send_event(DeviceId, ping);
         {error, Error} ->
             {error, Error}
     end.

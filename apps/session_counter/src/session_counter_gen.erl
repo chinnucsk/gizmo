@@ -10,8 +10,8 @@
 %% MACROS
 %% ###############################################################
 
--include("logger.hrl").
--include("session_counter.hrl").
+-include_lib("utils/include/logger.hrl").
+-include_lib("utils/include/types.hrl").
 
 %% ###############################################################
 %% STATE

@@ -7,7 +7,7 @@
 %% INCLUDE
 %% ###############################################################
 
--include("session_counter.hrl").
+-include_lib("utils/include/types.hrl").
 
 %% ###############################################################
 %% MACROS
@@ -19,29 +19,28 @@
 %% API
 %% ###############################################################
 
+%% @doc Saves session count at given timestamp for given application
 -spec save(binary(), binary(), integer()) -> ok.
 save(Key, Timestamp, Count) ->
-    Obj = riakc_obj:new(?BUCKET(Key), Timestamp, Count),
-    riakc_pb_socket:put(pooler:take_member(gizmo), Obj).
+    utils:db_execute(fun(Connection) ->
+        Obj = riakc_obj:new(?BUCKET(Key), Timestamp, Count),
+        riakc_pb_socket:put(Connection, Obj)
+    end, monitoring).
 
+%% @doc Reads sessions count in time period for given application
 -spec read(binary(), integer(), integer()) -> {ok, list()}.
 read(Key, Start, End) ->
-    {ok, Res} = riakc_pb_socket:mapred_bucket(pooler:take_member(gizmo),
-        ?BUCKET(Key),[
-            {map, {qfun, fun(O,_,_) -> map(O, Start, End) end}, none, true},
-            {reduce, {qfun, fun(List, _) -> reduce(List) end}, none, true}]),
-    result(active_sessions, Res).
+    Map = {map, {qfun, fun(O,_,_) -> map(O, Start, End) end}, none, true},
+    utils:db_execute(fun(Connection) ->
+        riakc_pb_socket:mapred_bucket(Connection, ?BUCKET(Key),[Map])
+    end, stats, fun result/1).
 
 %% ###############################################################
 %% INTERNAL FUNCTIONS
 %% ###############################################################
 
-result(active_sessions, [{0, Results}, {1, Total}]) ->
-    {ok, Total ++ Results};
-result(active_sessions, [{1, [{struct,[{total,0}]}]}]) ->
-    {ok, []};
-result(active_sessions, []) ->
-    {ok, []}.
+result({ok, [{0, Results}]}) -> {ok, Results};
+result({ok, []}) -> {ok, []}.
 
 map(Object, Start, End) ->
     case list_to_integer(binary_to_list(riak_object:key(Object))) of
@@ -50,10 +49,6 @@ map(Object, Start, End) ->
         _ ->
             []
     end.
-
-reduce(Objects) ->
-    Red = fun({struct, [{_, C}]}, Count) -> Count + C end,
-    [{struct, [{total, lists:foldl(Red, 0, Objects)}]}].
 
 %% ###############################################################
 %% ###############################################################

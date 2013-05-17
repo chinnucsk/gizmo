@@ -1,4 +1,4 @@
-{application, application_key,
+{application, application_obj,
  [
   {description, ""},
   {vsn, "1"},

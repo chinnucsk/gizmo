@@ -8,7 +8,7 @@
 %% INCLUDE
 %% ###############################################################
 
--include("logger.hrl").
+-include_lib("utils/include/logger.hrl").
 -include_lib("webmachine/include/webmachine.hrl").
 
 %% ###############################################################

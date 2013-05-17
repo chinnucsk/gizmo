@@ -8,7 +8,7 @@
 %% INCLUDE
 %% ###############################################################
 
--include("logger.hrl").
+-include_lib("utils/include/logger.hrl").
 -include_lib("webmachine/include/webmachine.hrl").
 
 %% ###############################################################
@@ -33,7 +33,7 @@ content_types_provided(ReqData, Context) ->
 %% ###############################################################
 
 process_post(ReqData, State) ->
-    case application_key:generate() of
+    case application_obj:create([]) of
         {ok, Key} ->
             Body = mochijson2:encode({struct, [{key, Key}]}),
             {true, wrq:set_resp_body(Body, ReqData), State};
